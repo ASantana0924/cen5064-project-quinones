@@ -12,6 +12,7 @@ const {
   consolidateHoldings,
   summarizePortfolio,
   allocatePortfolio,
+  buildValueHistory,
 } = require('./domain');
 const {
   scorePortfolio,
@@ -62,6 +63,11 @@ function configure(config) {
   news.configure(config);
   claude.configure(config);
   snaptrade.configure(config);
+}
+
+// Closes the database. Called by server.js when the server stops.
+function shutdown() {
+  data.closeDb();
 }
 
 class NotConfiguredError extends Error {
@@ -184,6 +190,18 @@ function getPortfolio(userId = APP_USER_ID) {
   };
 }
 
+// The portfolio's value over time, for the "Value over time" chart. range is one of
+// prices.HISTORY_RANGES ('1mo', '3mo', '6mo', '1y', '5y'; anything else means '1y').
+// Uses the latest prices for the last day, so call refreshPrices() first.
+// Never throws for price problems: tickers without history are listed in missing.
+async function getValueHistory({ range = '1y', userId = APP_USER_ID } = {}) {
+  if (!prices.HISTORY_RANGES[range]) range = '1y';
+  const { rows } = getPortfolio(userId);
+  const history = rows.length > 0 ? await prices.getHistory(rows.map((r) => r.ticker), range) : new Map();
+  const livePrices = new Map([...quotesFor(userId)].map(([ticker, q]) => [ticker, q.price]));
+  return { range, ...buildValueHistory(rows, history, { livePrices }) };
+}
+
 // Recommendations for the current portfolio (UC4): the risk score, rule-based
 // insights, and the news about what the user owns. Uses the latest prices, so call
 // refreshPrices() first. Never throws for news problems: if no news source answers,
@@ -294,6 +312,7 @@ async function disconnectBrokerage(userId = APP_USER_ID) {
 
 module.exports = {
   configure,
+  shutdown,
   addHolding,
   updateHolding,
   removeHolding,
@@ -302,6 +321,7 @@ module.exports = {
   resolveSyncConflicts,
   refreshPrices,
   getPortfolio,
+  getValueHistory,
   getRecommendations,
   getAdvice,
   startBrokerageConnection,

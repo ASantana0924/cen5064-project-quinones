@@ -187,7 +187,54 @@ function allocatePortfolio(rows, maxParts = 8) {
   return parts.map((p) => ({ ...p, percent: (p.value / total) * 100 }));
 }
 
+// The portfolio's market value on each trading day, next to how much money was in
+// it by then. Built from what the user holds today, so it shows "what my holdings
+// were worth", not a record of past sales.
+//
+// rows: consolidateHoldings() rows; each row.holdings entry counts from its
+//   purchaseDate on (a synced position has no date, so it counts throughout).
+// history: Map<ticker, [{ date, close }]> oldest first (prices.getHistory).
+// livePrices: Map<ticker, price>. When given, the last day uses the live price, so
+//   the chart ends on the same total as the summary tiles.
+//
+// A day only counts the holdings that are owned by then and have a close on or
+// before it, in both value and invested, so the gap between the lines is always
+// the gain on the same set of holdings. Days before anything was owned are dropped.
+// Returns { points: [{ date, value, invested }], missing: [tickers with no history] }.
+function buildValueHistory(rows, history, { livePrices = new Map() } = {}) {
+  const tracked = rows.filter((r) => history.get(r.ticker)?.length > 0);
+  const missing = rows.filter((r) => !tracked.includes(r)).map((r) => r.ticker);
+  const dates = [...new Set(tracked.flatMap((r) => history.get(r.ticker).map((p) => p.date)))].sort();
+  const lastDate = dates.at(-1);
+
+  // Per ticker: walk its closes alongside the dates, carrying the last close
+  // forward over days it didn't trade (holidays differ between exchanges).
+  const cursors = tracked.map((r) => ({ row: r, closes: history.get(r.ticker), i: -1 }));
+  const cents = (n) => Math.round(n * 100) / 100;
+  const points = [];
+  for (const date of dates) {
+    let value = 0;
+    let invested = 0;
+    let owned = false;
+    for (const c of cursors) {
+      while (c.i + 1 < c.closes.length && c.closes[c.i + 1].date <= date) c.i += 1;
+      if (c.i < 0) continue; // no close yet on this date (e.g. listed later)
+      let close = c.closes[c.i].close;
+      if (date === lastDate && livePrices.get(c.row.ticker) > 0) close = livePrices.get(c.row.ticker);
+      for (const h of c.row.holdings) {
+        if (h.purchaseDate && h.purchaseDate > date) continue;
+        owned = true;
+        value += h.shares * close;
+        invested += h.shares * h.purchasePrice;
+      }
+    }
+    if (owned) points.push({ date, value: cents(value), invested: cents(invested) });
+  }
+  return { points, missing };
+}
+
 module.exports = {
+  buildValueHistory,
   validateHolding,
   validatePositionEdit,
   applyOverrides,

@@ -21,7 +21,7 @@ their portfolio without building spreadsheets.
 |---|----------|--------|
 | UC1 | **Build and maintain a portfolio by hand:** add a holding (ticker, shares, purchase price, purchase date), edit or remove it; invalid input is rejected | ✅ Working |
 | UC2 | **Import holdings from a brokerage:** connect a brokerage read-only (E*TRADE, Robinhood, Schwab, Fidelity, …), sync and disconnect | ✅ Working |
-| UC3 | **See how the portfolio is doing:** total value, gain/loss, allocation, diversification and concentration scores | ✅ Working |
+| UC3 | **See how the portfolio is doing:** total value, gain/loss, allocation, value-over-time chart, diversification and concentration scores | ✅ Working |
 | UC4 | **Get news and recommendations for my holdings:** rule-based insights and news matched to what the user owns | ✅ Working |
 | UC5 | **Have my own account:** sign up and log in with a username and password; each account sees only its own portfolio; log out | ✅ Working |
 
@@ -56,6 +56,30 @@ run. Each account has its own portfolio. If you used Folio before accounts
 existed, the **first account you create takes over those holdings** (and any
 connected brokerage), so nothing is lost. Passwords are stored only as salted
 scrypt hashes; you stay logged in for 7 days unless you log out.
+
+**Your data is permanent.** Every account, login session and holding (and every
+edit or removal) is written to `data/folio.db` the moment you make it, so it
+survives stopping and restarting the server, a reboot, and switching git
+branches (`data/` is gitignored, so git never touches it). The server prints the
+database path when it starts and closes the file cleanly on Ctrl+C. To keep the
+database somewhere else, set `DB_FILE` (for example
+`$env:DB_FILE="D:olioolio.db"; npm start`). To back it up, copy that file
+while the server is stopped; deleting it starts Folio from scratch.
+`test/persistence.test.js` checks this by restarting a real server on the same
+file. Only short-lived caches (prices, news, AI answers) and the failed-login
+lockout live in memory and reset on restart.
+
+**Charts.** Under the holdings table:
+- **Value over time:** your portfolio's market value next to the amount you had
+  invested, over 1M / 3M / 6M / 1Y / 5Y. It's rebuilt from Yahoo Finance daily
+  closes and each purchase's date, so it works for holdings you just added.
+  Money you add shows as a step in the invested line, and the "Gain over this
+  period" figure leaves it out. Hover (or focus the chart and use the arrow
+  keys) to read any day; **Show as table** lists every point.
+- **Gain/loss by holding:** each holding's gain (right) or loss (left) since
+  purchase.
+- **Allocation:** a bar split by each holding's share of total value, above the
+  ranked list.
 
 **Live prices** come from Yahoo Finance and need no key. They refresh every
 minute while the page is open, or right away with **Refresh prices**. If
@@ -141,10 +165,10 @@ Four tiers, each with its own files:
 
 | Tier | Files | Responsibilities in Folio |
 |------|-------|---------------------------|
-| **Presentation** | `public/index.html`, `public/login.html`, `public/portfolio.html`, `public/account.js` | Landing page; log in / create account; account menu (username, Log out); portfolio dashboard (summary tiles, then Holdings, Recommendations and News tabs; holdings table, purchase history); dialogs to add, edit and remove holdings, connect a brokerage, and resolve sync conflicts. Sends input to the server as JSON and renders the result. **No business rules and no storage access.** |
+| **Presentation** | `public/index.html`, `public/login.html`, `public/portfolio.html`, `public/account.js`, `public/charts.js` | Landing page; log in / create account; account menu (username, Log out); portfolio dashboard (summary tiles, then Holdings, Recommendations and News tabs; holdings table, purchase history); `charts.js` draws the value-over-time, gain/loss and allocation charts as plain SVG/HTML (no chart library); dialogs to add, edit and remove holdings, connect a brokerage, and resolve sync conflicts. Sends input to the server as JSON and renders the result. **No business rules and no storage access.** |
 | **Service** | `server.js` (HTTP entry), `src/service.js`, `src/auth.js`, `src/config.js` | `auth.js`: sign up, log in and out, password hashing (scrypt) and sessions; `server.js` turns the session cookie into whose portfolio a request is for, and sends logged-out requests to the login page (pages) or a 401 (API). `service.js` orchestrates each use case for that user: add/edit/remove a holding, build the portfolio view, connect/sync/disconnect a brokerage, resolve sync conflicts, build recommendations and the written summary. Asks the Domain to decide and the Data tier to load and save. `server.js` only parses requests and maps results and errors to HTTP status codes. `config.js` reads the settings from the environment once; `server.js` hands them down through `service.configure()`. |
-| **Domain** | `src/domain.js`, `src/insights.js`, `src/advice.js`, `src/accounts.js` | The rules, as pure functions. `accounts.js`: what makes a valid username and password. `domain.js`: what makes a holding valid (ticker format, shares and price > 0, date not in the future); merging purchases into one row per ticker; value, total value and gain/loss (per holding and overall); allocation by ticker; applying the user's changes to synced holdings and detecting conflicts with fresh brokerage data. `insights.js`: the diversification score and concentration risk; headline sentiment; deciding which news is about which holding; the recommendation rules. `advice.js`: the facts given to the AI model, the checks on what it writes, and the rules-only summary. No I/O. |
-| **Data** | `src/data.js`, `src/snaptrade.js`, `src/prices.js`, `src/news.js`, `src/claude.js` | `data.js`: all SQLite access (accounts and sessions; each user's holdings, brokerage accounts, positions, buy history, and changes to synced holdings). `snaptrade.js`: the only code that uses the SnapTrade keys or calls SnapTrade; converts its data into Folio's shape. `prices.js`: the only code that fetches market prices (Yahoo Finance, with Finnhub as a backup), with a one-minute cache. `news.js`: the only code that fetches news (Finnhub company news, with Yahoo Finance as a backup), with a 15-minute cache. `claude.js`: the only code that calls the Claude API (optional), with a 6-hour cache per set of facts. |
+| **Domain** | `src/domain.js`, `src/insights.js`, `src/advice.js`, `src/accounts.js` | The rules, as pure functions. `accounts.js`: what makes a valid username and password. `domain.js`: what makes a holding valid (ticker format, shares and price > 0, date not in the future); merging purchases into one row per ticker; value, total value and gain/loss (per holding and overall); allocation by ticker; value and amount invested per day for the value-over-time chart; applying the user's changes to synced holdings and detecting conflicts with fresh brokerage data. `insights.js`: the diversification score and concentration risk; headline sentiment; deciding which news is about which holding; the recommendation rules. `advice.js`: the facts given to the AI model, the checks on what it writes, and the rules-only summary. No I/O. |
+| **Data** | `src/data.js`, `src/snaptrade.js`, `src/prices.js`, `src/news.js`, `src/claude.js` | `data.js`: all SQLite access (accounts and sessions; each user's holdings, brokerage accounts, positions, buy history, and changes to synced holdings). `snaptrade.js`: the only code that uses the SnapTrade keys or calls SnapTrade; converts its data into Folio's shape. `prices.js`: the only code that fetches market prices (Yahoo Finance, with Finnhub as a backup), with a one-minute cache, and daily price history for the value-over-time chart (Yahoo, one-hour cache). `news.js`: the only code that fetches news (Finnhub company news, with Yahoo Finance as a backup), with a 15-minute cache. `claude.js`: the only code that calls the Claude API (optional), with a 6-hour cache per set of facts. |
 
 **Dependency rule:** dependencies point one way: Presentation → Service →
 Domain, and Service → Data. The Domain depends on nothing (it imports no other

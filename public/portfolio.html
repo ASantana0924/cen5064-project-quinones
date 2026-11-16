@@ -296,6 +296,174 @@
     margin: 12px 0 0;
   }
 
+  /* ---- Charts (drawn by charts.js) ---- */
+  :root {
+    --chart-grid: #EEE9DF;     /* hairline gridlines, one step off the card */
+    --chart-axis: #DCD5C8;     /* baseline */
+    --chart-muted: #7C786F;    /* axis tick labels */
+    --series-value: #3F6B4E;   /* portfolio value (the line the story is about) */
+    --series-invested: #96918A;/* amount invested (the reference line) */
+    --bar-gain: #2E5039;
+    --bar-loss: #D9694C;
+    /* Allocation parts, in fixed order (validated: adjacent CVD ΔE >= 9) */
+    --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
+    --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #6250d6; --cat-8: #e34948;
+    --cat-other: #B5AFA3;
+  }
+  .chart-head-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+    margin: -4px 0 16px;
+  }
+  .chart-stat .label { font-size: 0.8rem; color: var(--ink-soft); }
+  .chart-stat .value { font-family: 'Newsreader', serif; font-size: 1.35rem; }
+  .chart-stat .value.gain { color: var(--sage-dark); }
+  .chart-stat .value.loss { color: var(--error); }
+  .chart-stat .value .pct {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-left: 4px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+  .legend li { display: flex; align-items: center; gap: 6px; }
+  .legend .key-line { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+  .legend .key-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .chart { position: relative; transition: opacity 0.15s ease; }
+  .chart.loading { opacity: 0.45; } /* refetch keeps the old frame */
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .chart svg:focus-visible { outline: 2px solid var(--sage); outline-offset: 4px; border-radius: 2px; }
+  .chart text { font-family: 'IBM Plex Sans', sans-serif; font-variant-numeric: tabular-nums; }
+  .chart-empty {
+    display: grid;
+    place-items: center;
+    min-height: 200px;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 0 16px;
+  }
+  .chart-tip {
+    position: absolute;
+    pointer-events: none;
+    min-width: 168px;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    box-shadow: 0 6px 20px rgba(28, 43, 34, 0.12);
+    font-size: 0.82rem;
+    z-index: 2;
+  }
+  .chart-tip .tip-date { color: var(--ink-soft); margin-bottom: 6px; }
+  .chart-tip .tip-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .chart-tip .tip-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart-tip .tip-row span:last-child { color: var(--ink-soft); }
+  .chart-tip .key-line { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+
+  /* Range picker (1M / 3M / ...) */
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .segmented button {
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .segmented button:hover { color: var(--ink); background: var(--paper); }
+  .segmented button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .segmented button:focus-visible { outline: 2px solid var(--sage); outline-offset: 1px; }
+
+  /* "Show as table": the same numbers as each chart, without hovering */
+  .chart-table { margin-top: 12px; font-size: 0.85rem; }
+  .chart-table > summary { cursor: pointer; color: var(--sage-dark); font-size: 0.85rem; width: fit-content; }
+  .chart-table .table-scroll { max-height: 280px; overflow-y: auto; margin-top: 8px; }
+  .chart-table th { position: sticky; top: 0; background: var(--card); }
+  .chart-table td, .chart-table th { padding: 6px 8px; }
+
+  /* Gain/loss by holding: bars grow left (loss) or right (gain) from one zero line */
+  .gl-list { list-style: none; margin: 0; padding: 0; }
+  .gl-list li {
+    display: grid;
+    grid-template-columns: 5rem 1fr 10rem;
+    gap: 12px;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .gl-list li:hover { background: var(--paper); }
+  .gl-list li:hover .gl-bar { filter: brightness(1.12); }
+  .gl-track { position: relative; height: 24px; }
+  .gl-zero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--chart-axis); }
+  .gl-bar {
+    position: absolute;
+    top: 5px;
+    height: 14px;
+    min-width: 2px;
+  }
+  .gl-bar.gain { background: var(--bar-gain); border-radius: 0 4px 4px 0; }
+  .gl-bar.loss { background: var(--bar-loss); border-radius: 4px 0 0 4px; }
+  .gl-list .num { text-align: right; }
+  .gl-list .num.gain { color: var(--sage-dark); }
+  .gl-list .num.loss { color: var(--error); }
+  .gl-list .num .pct { font-size: 0.8rem; margin-left: 4px; }
+
+  /* Allocation: one tall bar split into parts, above the ranked list */
+  .alloc-split {
+    display: flex;
+    gap: 2px;
+    height: 28px;
+    margin: 0 0 16px;
+  }
+  .alloc-split > span {
+    display: flex;
+    align-items: center;
+    min-width: 2px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden; /* only ever hides a label charts.js already marked as not fitting */
+  }
+  .alloc-split > span > span { margin-left: 8px; }
+  .alloc-split > span.dark-text { color: #0b0b0b; }
+  .alloc-split > span:hover { filter: brightness(1.1); }
+  .alloc-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 8px;
+    vertical-align: -1px;
+  }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+  .charts-grid > .card { min-width: 0; }
+  .charts-grid:has(> [hidden]) { grid-template-columns: 1fr; } /* one card: full width */
+
   /* Tabs: Holdings / Recommendations / News */
   .tabs {
     display: flex;
@@ -578,12 +746,15 @@
 
   @media (max-width: 960px) {
     .summary { grid-template-columns: 1fr 1fr; }
+    .charts-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 780px) {
     .summary { grid-template-columns: 1fr; }
     /* The holdings table already lists each value; keep the bars room to read. */
     .alloc-list li { grid-template-columns: 4rem 1fr 4rem; }
     .alloc-list .alloc-value { display: none; }
+    .gl-list li { grid-template-columns: 4rem 1fr 6.5rem; }
+    .gl-list .num .pct { display: none; }
     .fields { grid-template-columns: 1fr; }
   }
 </style>
@@ -680,13 +851,62 @@
         </div>
       </section>
 
-      <section class="card" id="allocation" aria-labelledby="allocation-title" hidden>
+      <section class="card" id="history-card" aria-labelledby="history-title" hidden>
         <div class="section-head">
-          <h2 id="allocation-title">Allocation</h2>
+          <h2 id="history-title">Value over time</h2>
+          <div class="segmented" id="history-range" role="group" aria-label="Time range">
+            <button type="button" data-range="1mo" aria-pressed="false">1M</button>
+            <button type="button" data-range="3mo" aria-pressed="false">3M</button>
+            <button type="button" data-range="6mo" aria-pressed="false">6M</button>
+            <button type="button" data-range="1y" aria-pressed="true">1Y</button>
+            <button type="button" data-range="5y" aria-pressed="false">5Y</button>
+          </div>
         </div>
-        <ul class="alloc-list" id="allocation-list" aria-label="Share of portfolio value by ticker"></ul>
-        <p class="alloc-note" id="allocation-note" hidden></p>
+        <div class="chart-head-stats" id="history-stats" hidden>
+          <div class="chart-stat">
+            <div class="label" id="history-gain-label">Gain over this period</div>
+            <div class="value" id="history-gain"></div>
+          </div>
+          <div class="chart-stat">
+            <div class="label">Added in this period</div>
+            <div class="value" id="history-added"></div>
+          </div>
+        </div>
+        <ul class="legend" id="history-legend" hidden>
+          <li><span class="key-line" style="background: var(--series-value)"></span>Market value</li>
+          <li><span class="key-line" style="background: var(--series-invested)"></span>Amount invested</li>
+        </ul>
+        <div class="chart" id="history-chart"></div>
+        <p class="alloc-note" id="history-note" hidden></p>
+        <details class="chart-table" id="history-table" hidden>
+          <summary>Show as table</summary>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Date</th><th class="num">Market value</th><th class="num">Invested</th><th class="num">Gain/loss</th></tr></thead>
+              <tbody id="history-table-body"></tbody>
+            </table>
+          </div>
+        </details>
       </section>
+
+      <div class="charts-grid">
+        <section class="card" id="gainloss-card" aria-labelledby="gainloss-title" hidden>
+          <div class="section-head">
+            <h2 id="gainloss-title">Gain/loss by holding</h2>
+          </div>
+          <ul class="gl-list" id="gainloss-list" aria-label="Gain or loss since purchase, by ticker"></ul>
+          <p class="alloc-note" id="gainloss-note" hidden></p>
+        </section>
+
+        <section class="card" id="allocation" aria-labelledby="allocation-title" hidden>
+          <div class="section-head">
+            <h2 id="allocation-title">Allocation</h2>
+          </div>
+          <div class="alloc-split" id="allocation-split" role="img"></div>
+          <ul class="alloc-list" id="allocation-list" aria-label="Share of portfolio value by ticker"></ul>
+          <p class="alloc-note" id="allocation-note" hidden></p>
+        </section>
+      </div>
     </div>
 
     <div role="tabpanel" id="panel-recommendations" aria-labelledby="tab-recommendations" hidden>
@@ -810,6 +1030,7 @@
     </div>
   </dialog>
 
+<script src="charts.js"></script>
 <script>
   // Presentation only: talks to the server and draws the result. No business rules here.
   const FIELDS = ['ticker', 'shares', 'purchasePrice', 'purchaseDate'];
@@ -931,13 +1152,18 @@
   function renderAllocation(allocation, unpricedCount) {
     const list = $('allocation-list');
     list.replaceChildren();
+    FolioCharts.allocationSplit($('allocation-split'), allocation, colorFor);
     const largest = allocation[0]?.value ?? 0;
     for (const part of allocation) {
       const li = document.createElement('li');
       const name = part.count ? `Other (${part.count} tickers)` : part.label;
       li.title = `${name}: ${money.format(part.value)}, ${part.percent.toFixed(1)}% of total value`;
       const label = document.createElement('span');
-      label.textContent = part.label;
+      const swatch = document.createElement('span');
+      swatch.className = 'alloc-swatch';
+      swatch.style.background = colorFor(part.label).color;
+      swatch.setAttribute('aria-hidden', 'true');
+      label.append(swatch, part.label);
       const bar = document.createElement('span');
       bar.className = 'alloc-bar';
       bar.style.width = `${(part.value / largest) * 100}%`;
@@ -960,6 +1186,145 @@
     $('allocation-note').textContent = notes.join(' ');
     $('allocation-note').hidden = notes.length === 0;
   }
+
+  // ---- Charts ----
+
+  // Each ticker keeps its color while the page is open, even when its rank changes
+  // or other holdings come and go: color follows the holding, not its position.
+  const CAT_COLORS = 8;
+  const tickerSlots = new Map(); // ticker -> slot 1..8
+  function colorFor(label) {
+    if (label === 'Other') return { color: 'var(--cat-other)', darkText: true };
+    if (!tickerSlots.has(label)) {
+      const shown = new Set((lastPortfolio.allocation || []).map((p) => tickerSlots.get(p.label)));
+      let slot = 1;
+      while (slot < CAT_COLORS && shown.has(slot)) slot += 1;
+      tickerSlots.set(label, slot);
+    }
+    const slot = tickerSlots.get(label);
+    return { color: `var(--cat-${slot})`, darkText: slot === 4 }; // dark text on yellow
+  }
+
+  // One bar is a stat, not a chart, so this needs at least two priced holdings.
+  function renderGainLossChart(rows) {
+    const shown = FolioCharts.gainLossBars($('gainloss-list'), rows);
+    $('gainloss-card').hidden = shown < 2;
+    const unpriced = rows.length - shown;
+    $('gainloss-note').textContent = unpriced
+      ? `Excludes ${unpriced} holding${unpriced === 1 ? '' : 's'} without a market price.` : '';
+    $('gainloss-note').hidden = !unpriced;
+  }
+
+  // Value over time. The range is remembered in this browser only (a convenience).
+  const HISTORY_RANGE_KEY = 'folio.historyRange';
+  let historyRange = '1y';
+  try { historyRange = localStorage.getItem(HISTORY_RANGE_KEY) || '1y'; } catch { /* storage blocked */ }
+  let lastHistory = null;
+  let historyRequest = 0;
+  let historyTimer = null;
+  const historyTip = document.createElement('div');
+  historyTip.className = 'chart-tip';
+  historyTip.hidden = true;
+
+  function markRange() {
+    for (const btn of $('history-range').querySelectorAll('button')) {
+      btn.setAttribute('aria-pressed', String(btn.dataset.range === historyRange));
+    }
+  }
+  markRange();
+
+  function drawHistory() {
+    if (!lastHistory || $('history-chart').clientWidth === 0) return;
+    const { points, missing, range } = lastHistory;
+    const allMissing = missing.length > 0 && missing.length === lastPortfolio.rows.length;
+    FolioCharts.valueChart($('history-chart'), points, {
+      range,
+      tooltip: historyTip,
+      emptyText: allMissing
+        ? "Couldn't load price history right now. Try again in a moment."
+        : 'Not enough history yet. The chart fills in after your holdings have been through a full trading day.',
+    });
+  }
+
+  function renderHistory(history) {
+    lastHistory = history;
+    $('history-chart').classList.remove('loading');
+    drawHistory();
+
+    const { points, missing } = history;
+    const enough = points.length >= 2;
+    $('history-stats').hidden = !enough;
+    $('history-legend').hidden = !enough;
+    $('history-table').hidden = !enough;
+    if (enough) {
+      const first = points[0];
+      const last = points.at(-1);
+      // Money added during the period isn't a gain, so take it out.
+      const gain = (last.value - last.invested) - (first.value - first.invested);
+      const added = last.invested - first.invested;
+      const el = $('history-gain');
+      el.classList.toggle('gain', gain > 0);
+      el.classList.toggle('loss', gain < 0);
+      el.textContent = (gain > 0 ? '+' : gain < 0 ? '−' : '') + money.format(Math.abs(gain));
+      $('history-added').textContent = money.format(added);
+    }
+
+    const body = $('history-table-body');
+    body.replaceChildren();
+    for (const p of points.slice().reverse()) {
+      const tr = document.createElement('tr');
+      cell(tr, p.date);
+      cell(tr, money.format(p.value), 'num');
+      cell(tr, money.format(p.invested), 'num');
+      const gl = p.value - p.invested;
+      cell(tr, (gl > 0 ? '+' : gl < 0 ? '−' : '') + money.format(Math.abs(gl)), `num ${gl > 0 ? 'gain' : gl < 0 ? 'loss' : ''}`);
+      body.appendChild(tr);
+    }
+
+    const note = missing.length
+      ? `No price history for ${missing.join(', ')}, so ${missing.length === 1 ? 'it is' : 'they are'} left out of this chart.`
+      : '';
+    $('history-note').textContent = note;
+    $('history-note').hidden = !note || missing.length === lastPortfolio.rows.length;
+  }
+
+  async function loadHistory() {
+    const request = ++historyRequest;
+    try {
+      const { status, data } = await api('GET', `/api/history?range=${encodeURIComponent(historyRange)}`);
+      if (request !== historyRequest || status !== 200) return;
+      renderHistory(data);
+    } catch {
+      // Keep the last chart; the next refresh tries again.
+    } finally {
+      if (request === historyRequest) $('history-chart').classList.remove('loading');
+    }
+  }
+
+  function scheduleHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = setTimeout(loadHistory, 250);
+  }
+
+  $('history-range').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-range]');
+    if (!btn || btn.dataset.range === historyRange) return;
+    historyRange = btn.dataset.range;
+    try { localStorage.setItem(HISTORY_RANGE_KEY, historyRange); } catch { /* storage blocked */ }
+    markRange();
+    $('history-chart').classList.add('loading'); // keep the old frame while loading
+    loadHistory();
+  });
+
+  // Redraw at the new width (and when the Holdings tab is shown again).
+  let lastChartWidth = 0;
+  new ResizeObserver(() => {
+    const width = $('history-chart').clientWidth;
+    if (width === lastChartWidth) return;
+    lastChartWidth = width;
+    drawHistory();
+    FolioCharts.fitSplitLabels($('allocation-split'));
+  }).observe($('history-card'));
 
   // ---- Recommendations and news (UC4) ----
 
@@ -1294,6 +1659,7 @@
     $('total-value').textContent = anyPriced ? money.format(summary.totalValue) : '—';
     renderGainLoss(summary);
     renderAllocation(portfolio.allocation || [], summary.unpricedCount);
+    renderGainLossChart(rows);
     const asOf = portfolio.pricesAsOf ? new Date(portfolio.pricesAsOf) : null;
     $('prices-as-of').textContent = asOf
       ? `Prices as of ${asOf.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
@@ -1330,6 +1696,8 @@
     $('empty-state').hidden = !empty;
     $('holdings-table').hidden = empty;
     $('head-actions').hidden = empty;
+    $('history-card').hidden = empty;
+    if (!empty) scheduleHistory();
     // Recommendations and news need something to work on.
     $('tabs').hidden = empty;
     if (empty && activeTab !== 'holdings') showTab('holdings');

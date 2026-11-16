@@ -150,6 +150,10 @@ function createServer(config = getConfig()) {
     if (route === 'GET /api/portfolio') {
       return sendJson(res, 200, await pricedPortfolio(userId, searchParams.get('refresh') === '1'));
     }
+    if (route === 'GET /api/history') {
+      await service.refreshPrices({ userId }); // cached briefly, so this is cheap
+      return sendJson(res, 200, await service.getValueHistory({ range: searchParams.get('range') ?? '1y', userId }));
+    }
     if (route === 'GET /api/recommendations') {
       await service.refreshPrices({ userId }); // cached briefly, so this is cheap
       return sendJson(res, 200, await service.getRecommendations({ fresh: searchParams.get('refresh') === '1', userId }));
@@ -229,7 +233,17 @@ module.exports = { createServer };
 
 if (require.main === module) {
   const config = getConfig();
-  createServer(config).listen(config.port, () => {
+  const server = createServer(config).listen(config.port, () => {
     console.log(`Folio running at http://localhost:${config.port}`);
+    console.log(`Saving accounts and portfolios to ${config.dbFile}`);
   });
+  // Every change is already written to the database file when it's made; on
+  // Ctrl+C (or a stop from the host) stop taking requests and close it cleanly.
+  const stop = () => {
+    server.close();
+    service.shutdown();
+    process.exit(0);
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
 }
